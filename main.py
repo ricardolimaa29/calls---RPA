@@ -9,10 +9,10 @@ from datetime import datetime
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
-import time
+
 import flet as ft
 hoje = datetime.now().strftime("%d/%m")
-
+lista_de_professores = ["Ricardo 🦆","Matheus 👑","Wilck 😎","Johnny 🦹‍♂️","Fernando 😘","Lazaro 🤡"]
 lista_de_turmas = ["SALA 04 14H","SALA 04 16H","SALA 04 SEG E QUA","SALA 04 TER E QUI"]
 def main(page:ft.Page):
     def pegar_dados_sheet(e):
@@ -34,11 +34,11 @@ def main(page:ft.Page):
         aba = planilha.worksheet(turma)
 
         dados = aba.get_all_values()
-        linha_datas = dados[4]
+        linha_datas = dados[3]
         if hoje in linha_datas:
             col_index = linha_datas.index(hoje)
             alunos_presentes = [
-                linha[1] for linha in dados[5:]
+                linha[1] for linha in dados[3:]
                 if col_index < len(linha) and linha[col_index].strip().upper() == "C"
             ]
             if alunos_presentes:
@@ -50,7 +50,8 @@ def main(page:ft.Page):
         else:
             alunos_presentes_text.value = ""
             mensagens.value = "😢 Data de hoje não encontrada na planilha."
-
+            print(dados[3])
+        print("Dados: \n",dados[3])
         page.update()
 
     page.title = "Calls --- RPA"
@@ -61,31 +62,23 @@ def main(page:ft.Page):
     page.window.max_height = 400
     page.window.min_width = 600
     page.window.min_height = 400
-    mensagens = ft.Text(f"Boa tarde ☀, deseja atualizar a chamada de hoje ?  📅  {hoje}", color="White",size=20)
+    mensagens = ft.Text(f" ☀, deseja atualizar a chamada de hoje ?  📅  {hoje}", color="White",size=20)
     turma_dropdown = ft.Dropdown(
         label="Selecione a turma",
         width=300,
         options=[ft.dropdown.Option(text=t, key=t) for t in lista_de_turmas]
     )
+    professor_dropdown = ft.Dropdown(
+        label="Selecione o professor",
+        width=300,
+        options=[ft.dropdown.Option(text=t, key=t) for t in lista_de_professores]
+    )
     comecar = ft.ElevatedButton("Iniciar",on_click=pegar_dados_sheet,width=200,color="Blue",bgcolor="White")
-    alunos_presentes_text = ft.Text("",color="White",size=15)
+    alunos_presentes_text = ft.Text("",color="Yellow",size=15)
 
-    def on_turma_change(e):
-        # Atualiza UI após selecionar a turma
-        mensagens.value = f"Turma selecionada: {turma_dropdown.value}"
-        page.update()
-
-    turma_dropdown.on_change = on_turma_change
-
-    def pegar_dados_sheet(e):
-        turma = turma_dropdown.value
-        if not turma:
-            mensagens.value = "❗ Por favor, selecione uma turma."
-            page.update()
-            return
     page.add(ft.Row([mensagens],alignment="center"),
              ft.Row([alunos_presentes_text],alignment="center"),
-             ft.Row([turma_dropdown],alignment="center"),
+             ft.Row([professor_dropdown,turma_dropdown],alignment="center"),
              ft.Row([comecar],alignment="center")
              )
 
@@ -111,6 +104,8 @@ ft.app(target=main)
 
 
 # time.sleep(30)
+
+
 
 
 
