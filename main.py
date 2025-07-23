@@ -12,7 +12,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 
 import flet as ft
 hoje = datetime.now().strftime("%d/%m")
-lista_de_professores = ["Ricardo 🦆","Matheus 👑","Wilck 😎","Johnny 🦹‍♂️","Fernando 😘","Lazaro 🤡"]
+lista_de_professores = ["Ricardo 🦆","Matheus 👑","Wilck 😎","Johnny 🦹‍♂️","Fernando 😘"]
 lista_de_turmas = ["SALA 04 14H","SALA 04 16H","SALA 04 SEG E QUA","SALA 04 TER E QUI"]
 def main(page:ft.Page):
     def pegar_dados_sheet(e):
