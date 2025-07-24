@@ -1,114 +1,196 @@
-## Utilizar o Flet com um design simples com um Botão e uma descrição de status
-## deixar tudo em exe para ser usado em qualquer maquina
-## postar no Github com readme perfeito
-
-
 import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime
-from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.support.ui import WebDriverWait
-
 import flet as ft
+import time
+
 hoje = datetime.now().strftime("%d/%m")
-lista_de_professores = ["Ricardo 🦆","Matheus 👑","Wilck 😎","Johnny 🦹‍♂️","Fernando 😘"]
-lista_de_turmas = ["SALA 04 14H","SALA 04 16H","SALA 04 SEG E QUA","SALA 04 TER E QUI"]
-def main(page:ft.Page):
-    def pegar_dados_sheet(e):
-        turma = turma_dropdown.value
-        if not turma:
-            mensagens.value = "❗ Por favor, selecione uma turma."
-            page.update()
-            return
-        # Autenticação
-        scopes = [
-            "https://www.googleapis.com/auth/spreadsheets",
-            "https://www.googleapis.com/auth/drive"
-        ]
-        creds = Credentials.from_service_account_file("credenciais.json", scopes=scopes)
-        client = gspread.authorize(creds)
+hora = datetime.now().time()
+hora_agora = hora.hour
 
-        # Abre a planilha e a aba
-        planilha = client.open("PRESENÇA FÁBRICA DE PROGRAMADORES")
-        aba = planilha.worksheet(turma)
 
-        dados = aba.get_all_values()
-        linha_datas = dados[3]
-        if hoje in linha_datas:
-            col_index = linha_datas.index(hoje)
-            alunos_presentes = [
-                linha[1] for linha in dados[3:]
-                if col_index < len(linha) and linha[col_index].strip().upper() == "C"
-            ]
-            if alunos_presentes:
-                alunos_presentes_text.value = "\n".join(alunos_presentes)
-                mensagens.value = "✅ Chamada localizada! Alunos com presença:"
-            else:
-                alunos_presentes_text.value = ""
-                mensagens.value = "🤷‍♂️ Nenhum aluno com presença 'C' hoje."
-        else:
-            alunos_presentes_text.value = ""
-            mensagens.value = "😢 Data de hoje não encontrada na planilha."
-            print(dados[3])
-        print("Dados: \n",dados[3])
-        page.update()
+def main(page: ft.Page):
+    if hora_agora < 12:
+        saudacao = "Bom dia 🌄"
+    elif hora_agora < 18:
+        saudacao = "Boa tarde 🌞"
+    else:
+        saudacao = "Boa noite 🌃"
 
     page.title = "Calls --- RPA"
     page.theme_mode = "dark"
-    page.window.width = 600
-    page.window.height = 400
-    page.window.max_width = 600
-    page.window.max_height = 400
-    page.window.min_width = 600
-    page.window.min_height = 400
-    mensagens = ft.Text(f" ☀, deseja atualizar a chamada de hoje ?  📅  {hoje}", color="White",size=20)
-    turma_dropdown = ft.Dropdown(
-        label="Selecione a turma",
-        width=300,
-        options=[ft.dropdown.Option(text=t, key=t) for t in lista_de_turmas]
-    )
-    professor_dropdown = ft.Dropdown(
-        label="Selecione o professor",
-        width=300,
-        options=[ft.dropdown.Option(text=t, key=t) for t in lista_de_professores]
-    )
-    comecar = ft.ElevatedButton("Iniciar",on_click=pegar_dados_sheet,width=200,color="Blue",bgcolor="White")
-    alunos_presentes_text = ft.Text("",color="Yellow",size=15)
+    page.window.maximized = True
+    page.fonts = {
+        "Poppins": "fonts/Poppins-Bold.ttf",
+        "Poppins2": "fonts/Poppins-Light.ttf",
+        "Poppins3": "fonts/Poppins-Regular.ttf",
+    }
 
-    page.add(ft.Row([mensagens],alignment="center"),
-             ft.Row([alunos_presentes_text],alignment="center"),
-             ft.Row([professor_dropdown,turma_dropdown],alignment="center"),
-             ft.Row([comecar],alignment="center")
-             )
+    mensagens = ft.Text(f"{saudacao}", color="White", size=30,font_family="Poppins")
+    alunos_presentes_text = ft.Text("", color="Yellow", size=15,font_family="Poppins2")
 
+    # Autenticação Google Sheets
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive"
+    ]
+    creds = Credentials.from_service_account_file("credenciais.json", scopes=scopes)
+    client = gspread.authorize(creds)
+
+    # Buscar planilhas compartilhadas
+    planilhas = client.openall()
+    dropdown_planilhas = ft.Dropdown(
+        label="Selecione a planilha",
+        width=300,
+        options=[ft.dropdown.Option(p.title) for p in planilhas],
+    )
+    dropdown_planilhas_post = ft.Dropdown(
+        label="Selecione a chamada",
+        width=300,
+        options=[ft.dropdown.Option(p.title) for p in planilhas],
+        visible=False
+    )
+
+    dropdown_abas = ft.Dropdown(
+        label="Selecione a aba",
+        width=300,
+        options=[],
+    )
+
+    # Atualiza abas ao selecionar planilha
+    def ao_selecionar_planilha(e):
+        nome_planilha = dropdown_planilhas.value
+        if not nome_planilha:
+            mensagens.value = "❗ Selecione uma planilha válida."
+            page.update()
+            return
+
+        planilha = client.open(nome_planilha)
+        abas = planilha.worksheets()
+        dropdown_abas.options = [ft.dropdown.Option(aba.title) for aba in abas]
+        dropdown_abas.value = None
+        mensagens.value = "✅ Planilha carregada, selecione a aba."
+        page.update()
+
+    dropdown_planilhas.on_change = ao_selecionar_planilha
+
+    def pegar_dados_sheet(e):
+        dropdown_planilhas_post.visible = True
+        planilha_nome = dropdown_planilhas.value
+        aba_nome = dropdown_abas.value
+
+        if not planilha_nome or not aba_nome:
+            mensagens.value = "❗ Selecione a planilha e a aba corretamente."
+            alunos_presentes_text.value = ""
+            page.update()
+            return
+
+        planilha = client.open(planilha_nome)
+        aba = planilha.worksheet(aba_nome)
+
+        dados = aba.get_all_values()
+        if len(dados) <= 3:
+            mensagens.value = "❗ Dados insuficientes na aba."
+            alunos_presentes_text.value = ""
+            page.update()
+            return
+
+        linha_datas = dados[3]
+        alunos = dados[4:]  # Pula os 4 primeiros cabeçalhos
+
+        mensagens.value = f"✅ Exibindo dados completos da chamada"
+        alunos_presentes_text.value = ""
+
+        colunas = [ft.DataColumn(ft.Text("Aluno", weight="bold"))]
+        for data in linha_datas[2:]:
+            colunas.append(ft.DataColumn(ft.Text(data)))
+
+        linhas = []
+        for aluno in alunos:
+            if len(aluno) < 2:
+                continue  
+            nome = aluno[1]
+            linha = [ft.DataCell(ft.Text(nome, weight="bold",font_family="Poppins2"))]
+
+            for i in range(2, len(linha_datas)):
+                valor = aluno[i] if i < len(aluno) else ""
+                valor = valor.strip().upper()
+                cor = "#FF4C4C" if valor == "F" else None
+                cor_verde = "#329703" if valor == "C" else None
+                linha.append(ft.DataCell(ft.Container(
+                    content=ft.Text(valor or "-"),
+                    bgcolor=cor if valor == "F" else cor_verde,
+                    padding=5,
+                    alignment=ft.alignment.center
+                )))
+            linhas.append(ft.DataRow(linha))
+
+        tabela_chamada = ft.DataTable(
+            columns=colunas,
+            rows=linhas,
+            heading_row_color="#121212",
+            border=ft.border.all(1, ft.Colors.GREY_800),
+            column_spacing=15,
+            data_row_color={"hovered": "#121212"},
+            show_checkbox_column=False,
+            divider_thickness=0.5
+        )
+
+        tabela_scroll_container = ft.Container(
+            content=ft.Column(
+                [
+                    ft.Row(
+                        controls=[tabela_chamada],
+                        scroll="auto"
+                    )
+                ],
+                scroll="auto", 
+                expand=False
+            ),
+            padding=10,
+            bgcolor="#121212",
+            border_radius=10,
+            # width=1200,
+            height=750,
+            alignment=ft.alignment.top_left
+        )
+
+
+        area_tabela.controls.clear()
+        area_tabela.controls.append(tabela_scroll_container)
+        page.update()
+        
+
+
+
+        tabela_chamada = ft.DataTable(
+            columns=colunas,
+            rows=linhas,
+            heading_row_color="#202020",
+            border=ft.border.all(1, ft.Colors.GREY_800),
+            column_spacing=15,
+            data_row_color={"hovered": "#1A1A1A"},
+            show_checkbox_column=False,
+            divider_thickness=0.5
+        )
+
+        
+
+    area_tabela = ft.Column([], scroll="auto")
+
+    page.controls.clear()
+    botao_iniciar = ft.ElevatedButton(
+            "Iniciar", on_click=pegar_dados_sheet, width=200, color="Blue", bgcolor="White"
+    )
+
+    page.add(
+        ft.Row([mensagens], alignment="center"),
+        ft.Row([alunos_presentes_text], alignment="center"),
+        ft.Row([dropdown_planilhas, dropdown_abas,dropdown_planilhas_post], alignment="center"),
+        ft.Row([botao_iniciar], alignment="center"),
+        ft.Divider(thickness=1),
+        ft.ResponsiveRow([area_tabela],alignment="center")
+    )
+    page.update()
 
 ft.app(target=main)
-
-
-# driver = webdriver.Chrome()
-
-
-# # Abrir o sistema SENAI
-# driver.get("https://diariofic.sp.senai.br/")
-# time.sleep(2)
-# # Preencher um campo (exemplo)
-# campo_usuario = driver.find_element(By.NAME, "aIdentificacao")
-# campo_usuario.send_keys("sn1099962")
-
-# campo_senha = driver.find_element(By.NAME, "aSenha")
-# campo_senha.send_keys("Rede29@05@@")
-# campo_senha.send_keys(Keys.ENTER)
-# time.sleep(3)
-# driver.get("https://diariofic.sp.senai.br/Turma")
-
-
-# time.sleep(30)
-
-
-
-
-
-
-
-
