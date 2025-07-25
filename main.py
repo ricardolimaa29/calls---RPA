@@ -2,11 +2,13 @@ import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime
 import flet as ft
-import time
+import pandas as pd
 
 hoje = datetime.now().strftime("%d/%m")
 hora = datetime.now().time()
 hora_agora = hora.hour
+data = datetime.now()
+data_formatada = data.strftime("%d/%m/%Y %H:%M:%S")
 
 
 def main(page: ft.Page):
@@ -27,7 +29,6 @@ def main(page: ft.Page):
     }
 
     mensagens = ft.Text(f"{saudacao}", color="White", size=30,font_family="Poppins")
-    alunos_presentes_text = ft.Text("", color="Yellow", size=15,font_family="Poppins2")
 
     # Autenticação Google Sheets
     scopes = [
@@ -50,6 +51,11 @@ def main(page: ft.Page):
         options=[ft.dropdown.Option(p.title) for p in planilhas],
         visible=False
     )
+    dropdown_planilhas_post.options = [
+        ft.dropdown.Option(f"{p.title}") for p in planilhas
+    ]
+
+
 
     dropdown_abas = ft.Dropdown(
         label="Selecione a aba",
@@ -57,7 +63,37 @@ def main(page: ft.Page):
         options=[],
     )
 
-    # Atualiza abas ao selecionar planilha
+    selected_file_path = ft.Text(value="", selectable=True)
+    
+
+    def on_file_picked(e: ft.FilePickerResultEvent):
+        dropdown_planilhas_post.visible = True
+        if e.files:
+            file = e.files[0]
+            selected_file_path.value = file.path
+            try:
+                df = pd.read_excel(file.path, engine="openpyxl")
+                mensagens.value = f"📄 Arquivo carregado com sucesso: {file.name}\nLinhas: {len(df)}"
+                mensagens.color = "Green"
+                page.update()
+
+                # Salva no client_storage para uso posterior
+                page.client_storage.set("dados_excel", df.to_dict(orient="records"))
+
+                # Mostra na tela a tabela da planilha local
+                mostrar_planilha_local_em_tabela(df.to_dict(orient="records"))
+
+            except Exception as err:
+                mensagens.value = f"❌ Erro ao ler arquivo: {err}"
+                mensagens.color = "Red"
+                page.update()
+
+
+            
+
+    file_picker = ft.FilePicker(on_result=on_file_picked)
+
+
     def ao_selecionar_planilha(e):
         nome_planilha = dropdown_planilhas.value
         if not nome_planilha:
@@ -74,14 +110,112 @@ def main(page: ft.Page):
 
     dropdown_planilhas.on_change = ao_selecionar_planilha
 
+    file_picker = ft.FilePicker(on_result=on_file_picked)
+    page.overlay.append(file_picker)
+
+    btn_selecte_planilhas = ft.ElevatedButton("Selecionar Arquivo", style=ft.ButtonStyle(color="White",bgcolor="Green"), on_click=lambda _: file_picker.pick_files(allow_multiple=False))
+
+    page.overlay.append(file_picker)
+    def atualizar_planilha_google(e):
+        planilha_nome = dropdown_planilhas.value
+        aba_nome = dropdown_abas.value
+        dados = page.client_storage.get("dados_excel")
+
+        if not planilha_nome or not aba_nome:
+            mensagens.value = "❗ Selecione a planilha e aba para atualizar."
+            mensagens.color = "Red"
+            page.update()
+            return
+
+        if not dados:
+            mensagens.value = "❗ Nenhum dado carregado do Excel."
+            mensagens.color = "Red"
+            page.update()
+            return
+
+        try:
+            planilha = client.open(planilha_nome)
+            aba = planilha.worksheet(aba_nome)
+
+            # Converte os dados de dicionário para lista de listas
+            colunas = list(dados[0].keys())
+            linhas = [colunas] + [[linha[col] for col in colunas] for linha in dados]
+
+            # Limpa a aba e insere os novos dados
+            aba.clear()
+            aba.update("A1", linhas)
+
+            mensagens.value = f"✅ Planilha '{aba_nome}' atualizada com sucesso!"
+            mensagens.color = "Green"
+            page.update()
+        except Exception as err:
+            mensagens.value = f"❌ Erro ao atualizar planilha: {err}"
+            mensagens.color = "Red"
+            page.update()
+    def mostrar_planilha_local_em_tabela(dados_excel):
+        if not dados_excel:
+            mensagens.value = "❌ Nenhum dado encontrado na planilha local."
+            mensagens.color = "Red"
+            page.update()
+            return
+
+        colunas_tabela = list(dados_excel[0].keys())
+        colunas = [ft.DataColumn(ft.Text(col, weight="bold")) for col in colunas_tabela]
+
+        linhas = []
+        for linha in dados_excel:
+            linha_data = []
+            for valor in linha.values():
+                valor_texto = str(valor).strip().upper()
+                cor = "#FF4C4C" if valor_texto == "F" else "#329703" if valor_texto == "C" else None
+                linha_data.append(
+                    ft.DataCell(
+                        ft.Container(
+                            content=ft.Text(valor_texto),
+                            bgcolor=cor,
+                            padding=5,
+                            alignment=ft.alignment.center,
+                        )
+                    )
+                )
+            linhas.append(ft.DataRow(linha_data))
+
+        tabela_local = ft.DataTable(
+            columns=colunas,
+            rows=linhas,
+            heading_row_color="#202020",
+            border=ft.border.all(1, ft.Colors.GREY_800),
+            column_spacing=15,
+            data_row_color={"hovered": "#1A1A1A"},
+            show_checkbox_column=False,
+            divider_thickness=0.5,
+        )
+
+        tabela_scroll_container = ft.Container(
+            content=ft.Column(
+                [ft.Row(controls=[tabela_local], scroll="auto")],
+                scroll="auto",
+                expand=False,
+            ),
+            padding=10,
+            bgcolor="#121212",
+            border_radius=10,
+            height=750,
+            alignment=ft.alignment.top_left,
+        )
+
+        area_tabela.controls.clear()
+        area_tabela.controls.append(tabela_scroll_container)
+        page.update()
+
     def pegar_dados_sheet(e):
         dropdown_planilhas_post.visible = True
         planilha_nome = dropdown_planilhas.value
         aba_nome = dropdown_abas.value
+        botao_atualizar_sheet.visible = True
 
         if not planilha_nome or not aba_nome:
             mensagens.value = "❗ Selecione a planilha e a aba corretamente."
-            alunos_presentes_text.value = ""
             page.update()
             return
 
@@ -91,7 +225,6 @@ def main(page: ft.Page):
         dados = aba.get_all_values()
         if len(dados) <= 3:
             mensagens.value = "❗ Dados insuficientes na aba."
-            alunos_presentes_text.value = ""
             page.update()
             return
 
@@ -99,7 +232,6 @@ def main(page: ft.Page):
         alunos = dados[4:]  # Pula os 4 primeiros cabeçalhos
 
         mensagens.value = f"✅ Exibindo dados completos da chamada"
-        alunos_presentes_text.value = ""
 
         colunas = [ft.DataColumn(ft.Text("Aluno", weight="bold"))]
         for data in linha_datas[2:]:
@@ -173,6 +305,37 @@ def main(page: ft.Page):
             show_checkbox_column=False,
             divider_thickness=0.5
         )
+            # Agora atualiza a planilha do Google conforme a planilha local
+        dados_excel = page.client_storage.get("dados_excel")
+
+        if not dados_excel:
+            mensagens.value += "\n❗ Nenhuma planilha local carregada para atualizar os dados."
+            mensagens.color = "Red"
+            page.update()
+            return
+
+        dias_excel = list(dados_excel[0].keys())[2:]  # Assume que datas estão da 3ª coluna em diante
+
+        for i, aluno in enumerate(alunos):
+            for j, dia in enumerate(linha_datas[2:], start=2):
+                if dia in dias_excel:
+                    valor = aluno[j] if j < len(aluno) else ""
+                    valor = valor.strip().upper()
+                    if valor == "C":
+                        aluno[j] = "."
+                    elif valor == "F":
+                        aluno[j] = "|"
+
+        try:
+            novos_dados = dados[:4] + alunos  # cabeçalhos + alunos modificados
+            aba.update("A1", novos_dados)
+            mensagens.value += "\n✅ Planilha Google atualizada com base na planilha local!"
+            mensagens.color = "Green"
+            page.update()
+        except Exception as err:
+            mensagens.value = f"❌ Erro ao atualizar Google Sheets: {err}"
+            mensagens.color = "Red"
+            page.update()
 
         
 
@@ -182,14 +345,23 @@ def main(page: ft.Page):
     botao_iniciar = ft.ElevatedButton(
             "Iniciar", on_click=pegar_dados_sheet, width=200, color="Blue", bgcolor="White"
     )
+    botao_atualizar_sheet = ft.ElevatedButton(
+        "Atualizar Planilha", 
+        width=200, 
+        color="White", 
+        bgcolor="Orange",
+        on_click=lambda e: atualizar_planilha_google(e),
+        visible= False
+    )
+
 
     page.add(
         ft.Row([mensagens], alignment="center"),
-        ft.Row([alunos_presentes_text], alignment="center"),
-        ft.Row([dropdown_planilhas, dropdown_abas,dropdown_planilhas_post], alignment="center"),
-        ft.Row([botao_iniciar], alignment="center"),
+        ft.Row([btn_selecte_planilhas], alignment="center"),
+        ft.Row([dropdown_planilhas,dropdown_abas], alignment="center"),
+        ft.Row([botao_iniciar,botao_atualizar_sheet], alignment="center"),
         ft.Divider(thickness=1),
-        ft.ResponsiveRow([area_tabela],alignment="center")
+        ft.ResponsiveRow([area_tabela],alignment="center"),
     )
     page.update()
 
