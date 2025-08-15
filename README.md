@@ -22,7 +22,6 @@ Automatiza o login no sistema SENAI, acessa a página de “Turmas” e extrai d
 1. Clone seu repositório:
    ```bash
    git clone https://github.com/ricardolimaa29/calls---RPA.git
-   cd seu-repo
 2. Crie e ative o ambiente virtual:
     python -m venv venv
     source venv/bin/activate   # Windows: venv\Scripts\activate
